@@ -15,6 +15,7 @@ if not pg.mixer:
 
 # Type alias
 COORDINATES = Tuple[int, int, int]
+SCREEN_COORDINATES = Tuple[int, int]
 
 # Constants
 _SIZE = (1000, 850)
@@ -197,10 +198,17 @@ class Game:
         self.background = pg.transform.smoothscale(self.background, _SIZE)
         self.mouse = Mouse()
         self.mouse_sprites = pg.sprite.Group(self.mouse)
-        self.black_piece_img = pg.image.load('pictures/piece_black.png').convert_alpha()
-        self.black_piece_img = pg.transform.smoothscale(self.black_piece_img, (44, 44))
-        self.white_piece_img = pg.image.load('pictures/piece_white.png').convert_alpha()
-        self.white_piece_img = pg.transform.smoothscale(self.white_piece_img, (44, 44))
+        self.black_piece_img_turn = pg.image.load('pictures/piece_black.png').convert_alpha()
+        self.black_piece_img_turn = pg.transform.smoothscale(self.black_piece_img_turn, (44, 44))
+        self.white_piece_img_turn = pg.image.load('pictures/piece_white.png').convert_alpha()
+        self.white_piece_img_turn = pg.transform.smoothscale(self.white_piece_img_turn, (44, 44))
+        self.black_piece_img_last = pg.image.load('pictures/piece_black.png').convert_alpha()
+        self.black_piece_img_last = pg.transform.smoothscale(self.black_piece_img_last, _PIECE_SIZE)
+        #self.black_piece_img_last.fill((255, 255, 255, 0.5), None, pg.BLEND_RGBA_MULT)
+        self.white_piece_img_last = pg.image.load('pictures/piece_white.png').convert_alpha()
+        self.white_piece_img_last = pg.transform.smoothscale(self.white_piece_img_last, _PIECE_SIZE)
+        #self.white_piece_img_last.fill((255, 255, 255, 0.5), None, pg.BLEND_RGBA_MULT)
+
         self.refresh_button, self.ai_level_white_dropdown, self.ai_level_black_dropdown = self._create_widgets()
         self.winning_sound = _load_sound('sounds/tada.wav')
         self.no_sound = _load_sound('sounds/chord.wav')
@@ -230,8 +238,8 @@ class Game:
         self.winner: Player | None = None
         self.ai_level_white = -1
         self.ai_level_black = -1
-        self.last_move: Tuple[COORDINATES, COORDINATES] | None = None
-        self.last_remove: COORDINATES | None = None
+        self.last_move: Tuple[SCREEN_COORDINATES, SCREEN_COORDINATES] | None = None
+        self.last_remove: SCREEN_COORDINATES | None = None
 
     def _create_widgets(self) -> Tuple[Button, Dropdown, Dropdown]:
         # buttons
@@ -381,7 +389,8 @@ class Game:
                     else:
                         self.place_piece(field.position, self.player, self.moving_piece.position)
                         self.last_remove = None
-                        self.last_move = (field.position, self.moving_piece.position)
+                        bank = _POSITIONS_BANK_BLACK if self.player == Player.BLACK else _POSITIONS_BANK_WHITE
+                        self.last_move = (bank[field.position], _get_board_position(self.moving_piece.position))
                         if self.player == Player.WHITE:
                             self.pieces_left_white -= 1
                         else:
@@ -453,7 +462,10 @@ class Game:
                             self.moving_piece.rect.center = _get_board_position(self.moving_piece.position)
                         else:
                             self.last_remove = None
-                            self.last_move = (field.position, self.moving_piece.position)
+                            self.last_move = (
+                                _get_board_position(field.position),
+                                _get_board_position(self.moving_piece.position),
+                            )
                             if self.forms_mill(self.moving_piece.position):
                                 self.status = GameStatus.MOVING_REMOVING
                                 self.action = Action.REMOVE
@@ -543,8 +555,19 @@ class Game:
 
         # last move
         if self.last_move:
-            pass
-            # TODO
+            if self.player == Player.WHITE:
+                image = self.white_piece_img_last
+                bank = _POSITIONS_BANK_WHITE
+            else:
+                image = self.black_piece_img_last
+                bank = _POSITIONS_BANK_BLACK
+            pos = self.last_move[0]
+            if isinstance(pos, tuple):
+                pos = _get_board_position(self.last_move[0])
+            else:
+                pos = bank[pos]
+            self.screen.blit(image,(pos[0] - _PIECE_SIZE[0] // 2, pos[1] - _PIECE_SIZE[1] // 2))
+
         if self.last_remove:
             # TODO
             pass
@@ -562,10 +585,10 @@ class Game:
             text = font.render("Player:", True, (0, 255, 0))
             text_pos = text.get_rect(x=105, centery=25)
             self.screen.blit(text, text_pos)
-        if self.player == Player.WHITE:
-            self.screen.blit(self.white_piece_img, (183, 3))
-        else:
-            self.screen.blit(self.black_piece_img, (183, 3))
+            if self.player == Player.WHITE:
+                self.screen.blit(self.white_piece_img_turn, (183, 3))
+            else:
+                self.screen.blit(self.black_piece_img_turn, (183, 3))
 
         # buttons
         pgw.update(events)

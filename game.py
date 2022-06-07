@@ -191,27 +191,42 @@ class Game:
         pg.init()
         self.screen = pg.display.set_mode(_SIZE, flags=pg.SCALED, vsync=1)
         pg.display.set_caption('Mill game')
-        icon = pg.image.load('pictures/icon.png')
-        pg.display.set_icon(icon)
+        pg.display.set_icon(pg.image.load('pictures/icon.png'))
         pg.mouse.set_visible(False)
         self.background = pg.image.load('pictures/background.png').convert()
         self.background = pg.transform.smoothscale(self.background, _SIZE)
         self.mouse = Mouse()
         self.mouse_sprites = pg.sprite.Group(self.mouse)
-        self.black_piece_img_turn = pg.image.load('pictures/piece_black.png').convert_alpha()
-        self.black_piece_img_turn = pg.transform.smoothscale(self.black_piece_img_turn, (44, 44))
-        self.white_piece_img_turn = pg.image.load('pictures/piece_white.png').convert_alpha()
-        self.white_piece_img_turn = pg.transform.smoothscale(self.white_piece_img_turn, (44, 44))
-        self.black_piece_img_last = pg.image.load('pictures/piece_black.png').convert_alpha()
-        self.black_piece_img_last = pg.transform.smoothscale(self.black_piece_img_last, _PIECE_SIZE)
-        #self.black_piece_img_last.fill((255, 255, 255, 0.5), None, pg.BLEND_RGBA_MULT)
-        self.white_piece_img_last = pg.image.load('pictures/piece_white.png').convert_alpha()
-        self.white_piece_img_last = pg.transform.smoothscale(self.white_piece_img_last, _PIECE_SIZE)
-        #self.white_piece_img_last.fill((255, 255, 255, 0.5), None, pg.BLEND_RGBA_MULT)
 
         self.refresh_button, self.ai_level_white_dropdown, self.ai_level_black_dropdown = self._create_widgets()
         self.winning_sound = _load_sound('sounds/tada.wav')
         self.no_sound = _load_sound('sounds/chord.wav')
+
+        # images
+        # indicate whose turn it is
+        self.black_piece_img_turn = pg.image.load('pictures/piece_black.png').convert_alpha()
+        self.black_piece_img_turn = pg.transform.smoothscale(self.black_piece_img_turn, (44, 44))
+
+        self.white_piece_img_turn = pg.image.load('pictures/piece_white.png').convert_alpha()
+        self.white_piece_img_turn = pg.transform.smoothscale(self.white_piece_img_turn, (44, 44))
+
+        # indicates last turn via piece
+        self.black_piece_img_last = pg.image.load('pictures/piece_black.png').convert_alpha()
+        self.black_piece_img_last = pg.transform.smoothscale(self.black_piece_img_last, _PIECE_SIZE)
+        self.black_piece_img_last.fill((255, 255, 255, 128), None, pg.BLEND_RGBA_MULT)
+
+        self.white_piece_img_last = pg.image.load('pictures/piece_white.png').convert_alpha()
+        self.white_piece_img_last = pg.transform.smoothscale(self.white_piece_img_last, _PIECE_SIZE)
+        self.white_piece_img_last.fill((255, 255, 255, 128), None, pg.BLEND_RGBA_MULT)
+
+        # highlights last turn
+        self.yellow_circle = pg.Surface(_PIECE_SIZE, pg.SRCALPHA)
+        pg.draw.circle(self.yellow_circle, (255, 255, 0, 128 // 3), (_PIECE_SIZE[0] / 2, _PIECE_SIZE[1] / 2),
+                       _PIECE_SIZE[0] / 2)
+
+        self.red_circle = pg.Surface(_PIECE_SIZE, pg.SRCALPHA)
+        pg.draw.circle(self.red_circle, (255, 0, 0, 128 // 3), (_PIECE_SIZE[0] / 2, _PIECE_SIZE[1] / 2),
+                       _PIECE_SIZE[0] / 2)
 
         # init pieces
         self.moving_piece: Piece | None = None
@@ -224,8 +239,7 @@ class Game:
         for (piece, position) in zip(self.piece_bank_black, _POSITIONS_BANK_BLACK):
             piece.rect.center = position
         self.pieces = pg.sprite.Group((*self.piece_bank_white, *self.piece_bank_black))
-        tmp = [e for e in _flatten(self.board) if e]
-        self.empty_fields = pg.sprite.Group(tmp)
+        self.empty_fields = pg.sprite.Group([e for e in _flatten(self.board) if e])
 
         # init game properties
         self.fly_white = False
@@ -318,8 +332,7 @@ class Game:
         for (piece, position) in zip(self.piece_bank_black, _POSITIONS_BANK_BLACK):
             piece.rect.center = position
         self.pieces = pg.sprite.Group((*self.piece_bank_white, *self.piece_bank_black))
-        tmp = [e for e in _flatten(self.board) if e]
-        self.empty_fields = pg.sprite.Group(tmp)
+        self.empty_fields = pg.sprite.Group([e for e in _flatten(self.board) if e])
 
         # init game properties
         self.fly_white = False
@@ -472,6 +485,13 @@ class Game:
                             else:
                                 # swap player
                                 self.player = self.player.get_next()
+                                # check if player can move
+                                if not self.can_move(self.player):
+                                    # player can't move -> player lost
+                                    self.winning_sound.play()
+                                    self.status = GameStatus.OVER
+                                    self.action = Action.OVER
+                                    self.winner = self.player.get_next()
                 else:
                     self.no_sound.play()
                     # snap back
@@ -500,11 +520,12 @@ class Game:
                         self.moving_piece.rect.center = _get_board_position(self.moving_piece.position)
                     else:
                         self.remove_piece(self.moving_piece.position, self.player.get_next(), field.position)
-                        self.last_remove = field.position
-                        if self.player == Player.WHITE:
-                            self.pieces_left_black -= 1
-                        else:
-                            self.pieces_left_white -= 1
+                        self.last_remove = _get_board_position(field.position)
+                        if self.status == GameStatus.MOVING_REMOVING:
+                            if self.player == Player.WHITE:
+                                self.pieces_left_black -= 1
+                            else:
+                                self.pieces_left_white -= 1
 
                         if self.status == GameStatus.PLACING_REMOVING:
                             self.status = GameStatus.PLACING
@@ -517,7 +538,8 @@ class Game:
                             if self.pieces_left_black == 3:
                                 self.fly_black = True
                             # game end?
-                            if self.pieces_left_white == 2 or self.pieces_left_black == 2:
+                            if self.pieces_left_white == 2 or self.pieces_left_black == 2 or \
+                                    not self.can_move(self.player.get_next()):
                                 # game finished
                                 self.winning_sound.play()
                                 self.status = GameStatus.OVER
@@ -555,22 +577,24 @@ class Game:
 
         # last move
         if self.last_move:
-            if self.player == Player.WHITE:
+            removing = self.status in (GameStatus.PLACING_REMOVING, GameStatus.MOVING_REMOVING)
+            if (self.player == Player.BLACK) ^ removing:
                 image = self.white_piece_img_last
-                bank = _POSITIONS_BANK_WHITE
             else:
                 image = self.black_piece_img_last
-                bank = _POSITIONS_BANK_BLACK
+            for pos in self.last_move:
+                self.screen.blit(self.yellow_circle, (pos[0] - _PIECE_SIZE[0] // 2, pos[1] - _PIECE_SIZE[1] // 2))
             pos = self.last_move[0]
-            if isinstance(pos, tuple):
-                pos = _get_board_position(self.last_move[0])
-            else:
-                pos = bank[pos]
-            self.screen.blit(image,(pos[0] - _PIECE_SIZE[0] // 2, pos[1] - _PIECE_SIZE[1] // 2))
+            self.screen.blit(image, (pos[0] - _PIECE_SIZE[0] // 2, pos[1] - _PIECE_SIZE[1] // 2))
 
         if self.last_remove:
-            # TODO
-            pass
+            if self.player == Player.WHITE:
+                image = self.white_piece_img_last
+            else:
+                image = self.black_piece_img_last
+            pos = self.last_remove
+            self.screen.blit(self.red_circle, (pos[0] - _PIECE_SIZE[0] // 2, pos[1] - _PIECE_SIZE[1] // 2))
+            self.screen.blit(image, (pos[0] - _PIECE_SIZE[0] // 2, pos[1] - _PIECE_SIZE[1] // 2))
 
         # Action
         if pg.font:
@@ -747,7 +771,7 @@ class Game:
                 return True
 
         # horizontal between rings
-        if x == 1:
+        if y == 1:
             if self.board[0][x][y].player == self.board[1][x][y].player == self.board[2][x][y].player:
                 return True
 
@@ -803,6 +827,21 @@ class Game:
                 return r - 1, x, y
 
         return None
+
+    def can_move(self, player: Player) -> bool:
+        pieces: List[Piece] = self.pieces.sprites()
+        for piece in pieces:
+            if piece.player != player or piece.status != PieceStatus.BOARD:
+                continue
+            if self.can_move_piece(piece.position):
+                return True
+        return False
+
+    def can_move_piece(self, coords: COORDINATES) -> bool:
+        if self.get_possible_directions(coords):
+            return True
+        else:
+            return False
 
     def is_move_legal(self, coords: COORDINATES, direction: Direction) -> bool:
         check_access(coords)
@@ -897,7 +936,7 @@ def _flatten(lists: List[List[Any | List[Any]]]) -> List[Any]:
     return res
 
 
-def _get_board_position(coords: COORDINATES) -> Tuple[int, int]:
+def _get_board_position(coords: COORDINATES) -> SCREEN_COORDINATES:
     r, x, y = coords
     return _POSITIONS_BOARD[r][x][y]
 

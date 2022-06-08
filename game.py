@@ -409,7 +409,8 @@ class Game:
                         else:
                             self.pieces_left_black -= 1
 
-                        if self.forms_mill(self.moving_piece.position):
+                        if self.forms_mill(self.moving_piece.position) and \
+                                not self.all_pieces_in_mills(self.player.get_next()):
                             self.status = GameStatus.PLACING_REMOVING
                             self.action = Action.REMOVE
                         else:
@@ -479,9 +480,11 @@ class Game:
                                 _get_board_position(field.position),
                                 _get_board_position(self.moving_piece.position),
                             )
-                            if self.forms_mill(self.moving_piece.position):
+                            if self.forms_mill(self.moving_piece.position) and \
+                                    not self.all_pieces_in_mills(self.player.get_next()):
                                 self.status = GameStatus.MOVING_REMOVING
                                 self.action = Action.REMOVE
+
                             else:
                                 # swap player
                                 self.player = self.player.get_next()
@@ -777,6 +780,12 @@ class Game:
 
         return False
 
+    def all_pieces_in_mills(self, player: Player | None = None) -> bool:
+        for piece in self.get_pieces(player, PieceStatus.BOARD):
+            if not self.forms_mill(piece.position):
+                return False
+        return True
+
     @staticmethod
     def _get_dest_coord(coords: COORDINATES, direction: Direction) -> COORDINATES | None:
         r, x, y = coords
@@ -829,10 +838,7 @@ class Game:
         return None
 
     def can_move(self, player: Player) -> bool:
-        pieces: List[Piece] = self.pieces.sprites()
-        for piece in pieces:
-            if piece.player != player or piece.status != PieceStatus.BOARD:
-                continue
+        for piece in self.get_pieces(player, PieceStatus.BOARD):
             if self.can_move_piece(piece.position):
                 return True
         return False
@@ -877,6 +883,14 @@ class Game:
         dest = self._get_dest_coord(coords, direction)
         # swap
         self._swap(coords, dest)
+
+    def get_pieces(self, player: Player | None = None, status: PieceStatus | None = None) -> List[Piece]:
+        pieces: List[Piece] = self.pieces.sprites()
+        res = []
+        for piece in pieces:
+            if (player is None or piece.player == player) and (status is None or piece.status == status):
+                res.append(piece)
+        return res
 
     def get_board_as_str(self) -> str:
         """returns a str representation of the board"""

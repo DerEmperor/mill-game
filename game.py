@@ -254,6 +254,7 @@ class Game:
         self.ai_level_black = -1
         self.last_move: Tuple[SCREEN_COORDINATES, SCREEN_COORDINATES] | None = None
         self.last_remove: SCREEN_COORDINATES | None = None
+        self.ki = KI()
 
     def _create_widgets(self) -> Tuple[Button, Dropdown, Dropdown]:
         # buttons
@@ -359,21 +360,25 @@ class Game:
 
                 # update mouse
                 self.mouse.update()
-
-                if self.status == GameStatus.PLACING:
+                if (self.player == Player.BLACK and self.ai_level_black != -1) or \
+                        (self.player == Player.WHITE and self.ai_level_white != -1):
+                    self._handle_ai_move(event)
+                elif self.status == GameStatus.PLACING:
                     self._handle_placing(event)
                 elif self.status == GameStatus.MOVING:
                     self._handle_moving(event)
                 elif self.status in (GameStatus.PLACING_REMOVING, GameStatus.MOVING_REMOVING):
                     self._handle_removing(event)
-                elif self.status == GameStatus.WAIT:
-                    pass
                 elif self.status == GameStatus.OVER:
                     pass
                 elif self.status == GameStatus.QUIT:
                     pass
                 else:
                     raise CodeUnreachable
+
+                if (self.player == Player.BLACK and self.ai_level_black != -1) or \
+                        (self.player == Player.WHITE and self.ai_level_white != -1):
+                    self.action = Action.WAIT
 
             self._draw_game(events)
 
@@ -382,6 +387,14 @@ class Game:
 
         # Close the window and quit.
         pg.quit()
+
+    def _handle_ai_move(self, event: pg.Event) -> None:
+        src, dest, rmv = self.ki.get_move(self.board, self.player, self.status)
+        if self.status == GameStatus.PLACING:
+            bank = _POSITIONS_BANK_BLACK if self.player == Player.BLACK else _POSITIONS_BANK_WHITE
+            piece = None
+            field = None
+        # TODO
 
     def _handle_placing(self, event: pg.Event) -> None:
         if event.type == MOUSEBUTTONDOWN:

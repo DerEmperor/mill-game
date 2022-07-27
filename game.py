@@ -244,8 +244,8 @@ class AI:
 
         return None, (1, 1, 1), None
 
-    @staticmethod
-    def forms_mill(board, coords: COORDINATES) -> bool:
+    @classmethod
+    def forms_mill(cls, board, coords: COORDINATES) -> bool:
         check_access(coords)
         r, x, y = coords
         # vertical on ring
@@ -269,6 +269,43 @@ class AI:
                 return True
 
         return False
+
+    @classmethod
+    def all_pieces_in_mills(cls, board: BOARD, player: Player | None = None) -> bool:
+        for piece_coords in cls.get_pieces(board, player):
+            if not cls.forms_mill(board, piece_coords):
+                return False
+        return True
+
+    @classmethod
+    def get_pieces(cls, board: BOARD, player: Player | None = None) -> List[COORDINATES]:
+        res = []
+        for r in range(3):
+            for x in range(3):
+                for y in range(3):
+                    if x == y == 1:
+                        continue
+                    if player is None:
+                        if board[r][x][y] is not None:
+                            res.append((r, x, y))
+                    else:
+                        if board[r][x][y] == player:
+                            res.append((r, x, y))
+        return res
+
+    @classmethod
+    def get_possible_moves(cls, board: BOARD, player: Player | None = None, fields: List[COORDINATES] | None = None
+                           ) -> List[Tuple[COORDINATES, COORDINATES]]:
+        res = []
+        if fields is None:
+            fields = cls.get_pieces(board, player)
+
+        for field in fields:
+            for direction in Direction:
+                dest = Game.get_dest_coord(field, direction)
+                if dest is not None:
+                    res.append((field, dest))
+        return res
 
 
 class Game:
@@ -919,7 +956,7 @@ class Game:
         reachable_fields = []
         for direction in Direction:
             if self.is_move_legal(src, direction):
-                reachable_fields.append(self._get_dest_coord(src, direction))
+                reachable_fields.append(self.get_dest_coord(src, direction))
 
         if dest not in reachable_fields:
             raise IllegalMove("You can't move there.")
@@ -995,7 +1032,7 @@ class Game:
         return True
 
     @staticmethod
-    def _get_dest_coord(coords: COORDINATES, direction: Direction) -> COORDINATES | None:
+    def get_dest_coord(coords: COORDINATES, direction: Direction) -> COORDINATES | None:
         r, x, y = coords
         check_access(coords)
 
@@ -1059,7 +1096,7 @@ class Game:
 
     def is_move_legal(self, coords: COORDINATES, direction: Direction) -> bool:
         check_access(coords)
-        return self._get_dest_coord(coords, direction) is not None
+        return self.get_dest_coord(coords, direction) is not None
 
     def get_possible_directions(self, coords: COORDINATES) -> List[Direction]:
         check_access(coords)
@@ -1071,7 +1108,7 @@ class Game:
 
         legal_directions = []
         for direction in Direction:
-            dest_coords = self._get_dest_coord(coords, direction)
+            dest_coords = self.get_dest_coord(coords, direction)
             if dest_coords:
                 if isinstance(self.get_field(dest_coords), Empty):
                     legal_directions.append(direction)
@@ -1088,7 +1125,7 @@ class Game:
         if not self.is_move_legal(coords, direction):
             raise IllegalMove("You can't move there")
 
-        dest = self._get_dest_coord(coords, direction)
+        dest = self.get_dest_coord(coords, direction)
         # swap
         self._swap(coords, dest)
 
@@ -1198,7 +1235,7 @@ def _get_collides(sprite: Piece | Mouse, group: pg.sprite.AbstractGroup) -> Piec
     return collides[0]
 
 
-def check_access(coords) -> None:
+def check_access(coords:COORDINATES) -> None:
     r, x, y = coords
     if r < 0 or r > 2:
         raise AccessIllegalField('r mest be in (0,1,2).')

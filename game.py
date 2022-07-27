@@ -5,7 +5,7 @@ import pygame_widgets as pgw
 from pygame_widgets.button import Button
 from pygame_widgets.dropdown import Dropdown
 from pygame.locals import *
-from typing import List, Tuple, Any
+from typing import List, Tuple, Any, Optional, Union
 from enum import Enum, auto
 
 if not pg.font:
@@ -24,6 +24,33 @@ _FIELD_SIZE = (25, 25)
 _MOUSE_SIZE = (20, 20)
 
 _FONT_SIZE = 32
+
+POSSIBLE_MOVES = {
+    (0, 0, 0): {(0, 0, 1), (0, 1, 0)},
+    (0, 0, 1): {(0, 0, 0), (0, 0, 2), (1, 0, 1)},
+    (0, 0, 2): {(0, 0, 1), (0, 1, 2)},
+    (0, 1, 0): {(1, 1, 0), (0, 0, 0), (0, 2, 0)},
+    (0, 1, 2): {(1, 1, 2), (0, 0, 2), (0, 2, 2)},
+    (0, 2, 0): {(0, 2, 1), (0, 1, 0)},
+    (0, 2, 1): {(0, 2, 0), (0, 2, 2), (1, 2, 1)},
+    (0, 2, 2): {(0, 2, 1), (0, 1, 2)},
+    (1, 0, 0): {(1, 0, 1), (1, 1, 0)},
+    (1, 0, 1): {(1, 0, 0), (1, 0, 2), (0, 0, 1), (2, 0, 1)},
+    (1, 0, 2): {(1, 0, 1), (1, 1, 2)},
+    (1, 1, 0): {(0, 1, 0), (2, 1, 0), (1, 0, 0), (1, 2, 0)},
+    (1, 1, 2): {(2, 1, 2), (0, 1, 2), (1, 0, 2), (1, 2, 2)},
+    (1, 2, 0): {(1, 2, 1), (1, 1, 0)},
+    (1, 2, 1): {(1, 2, 0), (1, 2, 2), (2, 2, 1), (0, 2, 1)},
+    (1, 2, 2): {(1, 2, 1), (1, 1, 2)},
+    (2, 0, 0): {(2, 0, 1), (2, 1, 0)},
+    (2, 0, 1): {(2, 0, 0), (2, 0, 2), (1, 0, 1)},
+    (2, 0, 2): {(2, 0, 1), (2, 1, 2)},
+    (2, 1, 0): {(1, 1, 0), (2, 0, 0), (2, 2, 0)},
+    (2, 1, 2): {(1, 1, 2), (2, 0, 2), (2, 2, 2)},
+    (2, 2, 0): {(2, 2, 1), (2, 1, 0)},
+    (2, 2, 1): {(2, 2, 0), (2, 2, 2), (1, 2, 1)},
+    (2, 2, 2): {(2, 2, 1), (2, 1, 2)},
+}
 
 # pixel positions
 _POSITIONS_BANK_WHITE = [(50, y) for y in range(95, 896, 89)]
@@ -167,13 +194,90 @@ class Piece(pg.sprite.Sprite):
             raise IllegalMove("You can't move a piece that's not on the board")
 
 
+# Type Alias
+BOARD_SPRITES = List[List[List[Union[Piece, Empty]]]]
+BOARD = List[List[List[Union[Player, None]]]]
+MOVE = Tuple[Optional[COORDINATES], COORDINATES, Optional[COORDINATES]]
+
+
+class AI:
+    """
+    board is 3d list:
+    r(ing): outer, middle, inner ring
+    ┌────> x
+    │
+    │
+    v
+    y
+    ┌────────┬────────┐
+    │  ┌─────┼─────┐  │
+    │  │  ┌──┴──┐  │  │
+    ├──┼──┤     ├──┼──┤
+    │  │  └──┬──┘  │  │
+    │  └─────┼─────┘  │
+    └────────┴────────┘
+    """
+
+    def __init__(self, level: int = 0):
+        self.level = level
+
+    def set_level(self, level: int) -> None:
+        self.level = level
+
+    def get_move(self, board: BOARD_SPRITES, player: Player, status: GameStatus) -> MOVE:
+        board = _convert_board(board)
+        if self.level <= 0:
+            # random move
+            return self._get_random_move(board, player, status)
+
+        return (1, 1, 1), (1, 1, 1), None
+
+    @staticmethod
+    def _get_random_move(board: BOARD, player: Player, status: GameStatus) -> MOVE:
+        if status == GameStatus.PLACING:
+            pass
+            # search pieces
+        elif status == GameStatus.MOVING:
+            pass
+        else:
+            raise FatalError("illegal game status in get_random_move")
+
+        return None, (1, 1, 1), None
+
+    @staticmethod
+    def forms_mill(board, coords: COORDINATES) -> bool:
+        check_access(coords)
+        r, x, y = coords
+        # vertical on ring
+        if x in (0, 2):
+            if board[r][x][0] == board[r][x][1] == board[r][x][2]:
+                return True
+
+        # horizontal on ring
+        if y in (0, 2):
+            if board[r][0][y] == board[r][1][y] == board[r][2][y]:
+                return True
+
+        # vertical between rings
+        if x == 1:
+            if board[0][x][y] == board[1][x][y] == board[2][x][y]:
+                return True
+
+        # horizontal between rings
+        if y == 1:
+            if board[0][x][y] == board[1][x][y] == board[2][x][y]:
+                return True
+
+        return False
+
+
 class Game:
     """
     board is 3d list:
     r(ing): outer, middle, inner ring
-    ---> x
-    |
-    |
+    ┌────> x
+    │
+    │
     v
     y
 
@@ -254,7 +358,7 @@ class Game:
         self.ai_level_black = -1
         self.last_move: Tuple[SCREEN_COORDINATES, SCREEN_COORDINATES] | None = None
         self.last_remove: SCREEN_COORDINATES | None = None
-        self.ki = KI()
+        self.ai = AI()
 
     def _create_widgets(self) -> Tuple[Button, Dropdown, Dropdown]:
         # buttons
@@ -360,10 +464,7 @@ class Game:
 
                 # update mouse
                 self.mouse.update()
-                if (self.player == Player.BLACK and self.ai_level_black != -1) or \
-                        (self.player == Player.WHITE and self.ai_level_white != -1):
-                    self._handle_ai_move(event)
-                elif self.status == GameStatus.PLACING:
+                if self.status == GameStatus.PLACING:
                     self._handle_placing(event)
                 elif self.status == GameStatus.MOVING:
                     self._handle_moving(event)
@@ -374,11 +475,20 @@ class Game:
                 elif self.status == GameStatus.QUIT:
                     pass
                 else:
-                    raise CodeUnreachable
+                    raise CodeUnreachable()
 
-                if (self.player == Player.BLACK and self.ai_level_black != -1) or \
-                        (self.player == Player.WHITE and self.ai_level_white != -1):
-                    self.action = Action.WAIT
+            if self.status in (GameStatus.PLACING, GameStatus.MOVING) and \
+                    ((self.player == Player.BLACK and self.ai_level_black != -1) or
+                     (self.player == Player.WHITE and self.ai_level_white != -1)):
+                # ai move
+                self.action = Action.WAIT
+                self._draw_game(events)
+                if self.status == GameStatus.PLACING:
+                    self._handle_ai_placing()
+                elif self.status == GameStatus.MOVING:
+                    self._handle_ai_moving()
+                else:
+                    raise CodeUnreachable()
 
             self._draw_game(events)
 
@@ -388,13 +498,98 @@ class Game:
         # Close the window and quit.
         pg.quit()
 
-    def _handle_ai_move(self, event: pg.Event) -> None:
-        src, dest, rmv = self.ki.get_move(self.board, self.player, self.status)
-        if self.status == GameStatus.PLACING:
-            bank = _POSITIONS_BANK_BLACK if self.player == Player.BLACK else _POSITIONS_BANK_WHITE
-            piece = None
-            field = None
-        # TODO
+    def _handle_ai_moving(self) -> None:
+        src, dest, rmv = self.ai.get_move(self.board, self.player, self.status)
+
+        if (self.player == Player.WHITE) and self.fly_white or (self.player == Player.BLACK and self.fly_black):
+            self.fly_piece(src, dest)
+        else:
+            self.move_piece_coords(src, dest)
+
+        self.last_remove = None
+        self.last_move = (_get_board_position(src), _get_board_position(dest))
+
+        if rmv is not None:
+            self.remove_piece(rmv)
+            self.last_remove = _get_board_position(rmv)
+
+            if self.player == Player.WHITE:
+                self.pieces_left_black -= 1
+            else:
+                self.pieces_left_white -= 1
+
+            # flying?
+            if self.pieces_left_white == 3:
+                self.fly_white = True
+            if self.pieces_left_black == 3:
+                self.fly_black = True
+
+            # game end?
+            if self.pieces_left_white < 3 or self.pieces_left_black < 3:
+                # game finished
+                self.winning_sound.play()
+                self.status = GameStatus.OVER
+                self.action = Action.OVER
+                self.winner = self.player
+            else:
+                # move again
+                if self.player.get_next() == Player.WHITE and self.fly_white:
+                    self.action = Action.FLY
+                elif self.player.get_next() == Player.BLACK and self.fly_black:
+                    self.action = Action.FLY
+                else:
+                    self.action = Action.MOVE
+
+        # swap player
+        self.player = self.player.get_next()
+
+        # check if player can move
+        if not self.can_move(self.player):
+            # player can't move -> player lost
+            self.winning_sound.play()
+            self.status = GameStatus.OVER
+            self.action = Action.OVER
+            self.winner = self.player.get_next()
+
+    def _handle_ai_placing(self) -> None:
+        src, dest, rmv = self.ai.get_move(self.board, self.player, self.status)
+        if src is None:
+            bank = self.piece_bank_white if self.player == Player.WHITE else self.piece_bank_black
+            for i in range(9):
+                if isinstance(bank[i], Piece) and bank[i].player == self.player:
+                    src = i
+        self.place_piece(dest, self.player, src)
+        self.action = Action.PLACE
+        self.last_remove = None
+        bank = _POSITIONS_BANK_BLACK if self.player == Player.BLACK else _POSITIONS_BANK_WHITE
+        self.last_move = (bank[src], _get_board_position(self.moving_piece.position))
+        if self.player == Player.WHITE:
+            self.pieces_left_white -= 1
+        else:
+            self.pieces_left_black -= 1
+
+        if self.pieces_left_white == self.pieces_left_black == 0:
+            # placing finished
+            self.status = GameStatus.MOVING
+            self.action = Action.MOVE
+
+            # count pieces
+            for r in range(3):
+                for x in range(3):
+                    for y in range(3):
+                        if x == y == 1:
+                            continue
+                        if isinstance(self.board[r][x][y], Piece):
+                            if self.board[r][x][y].player == Player.BLACK:
+                                self.pieces_left_black += 1
+                            else:
+                                self.pieces_left_white += 1
+
+        if rmv is not None:
+            self.remove_piece(rmv)
+            self.last_remove = _get_board_position(rmv)
+
+        self.player = self.player.get_next()
 
     def _handle_placing(self, event: pg.Event) -> None:
         if event.type == MOUSEBUTTONDOWN:
@@ -554,7 +749,7 @@ class Game:
                             if self.pieces_left_black == 3:
                                 self.fly_black = True
                             # game end?
-                            if self.pieces_left_white == 2 or self.pieces_left_black == 2 or \
+                            if self.pieces_left_white < 3 or self.pieces_left_black < 3 or \
                                     not self.can_move(self.player.get_next()):
                                 # game finished
                                 self.winning_sound.play()
@@ -564,14 +759,14 @@ class Game:
                             else:
                                 # move again
                                 self.status = GameStatus.MOVING
-                                if self.player == Player.WHITE and self.fly_white:
+                                if self.player.get_next() == Player.WHITE and self.fly_white:
                                     self.action = Action.FLY
-                                elif self.player == Player.BLACK and self.fly_black:
+                                elif self.player.get_next() == Player.BLACK and self.fly_black:
                                     self.action = Action.FLY
                                 else:
                                     self.action = Action.MOVE
                         else:
-                            raise CodeUnreachable
+                            raise CodeUnreachable()
 
                         # swap player
                         self.player = self.player.get_next()
@@ -953,6 +1148,19 @@ class Game:
         print(self.get_board_as_str())
 
 
+def _convert_board(board: BOARD_SPRITES) -> BOARD:
+    def get_field(field: Piece | Empty) -> None | Player:
+        if isinstance(field, Empty):
+            return None
+        else:
+            if field.player == Player.BLACK:
+                return Player.BLACK
+            else:
+                return Player.WHITE
+
+    return [[[get_field(board[r][x][y]) for y in range(3)] for x in range(3)] for r in range(3)]
+
+
 def _flatten(lists: List[List[Any | List[Any]]]) -> List[Any]:
     res = []
     for sublist in lists:
@@ -1000,3 +1208,13 @@ def check_access(coords) -> None:
         raise AccessIllegalField('y mest be in (0,1,2).')
     if x == y == 1:
         raise AccessIllegalField("You can't access the \"middle\" field")
+
+
+def main():
+    # start mill game:
+    game = Game()
+    game.run_game()
+
+
+if __name__ == "__main__":
+    main()
